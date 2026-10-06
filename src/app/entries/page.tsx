@@ -43,9 +43,10 @@ export default function EntriesPage() {
 
   return (
     <main className="mx-auto w-full max-w-2xl px-5 py-8">
-      <Link href="/" className="text-sm text-cyan">
-        &larr; Home
-      </Link>
+      <div className="flex items-center justify-between text-sm text-cyan">
+        <Link href="/">&larr; Home</Link>
+        <Link href="/import">Import</Link>
+      </div>
       <div className="mt-3 mb-6 flex items-center justify-between gap-4">
         <h1 className="title-glow text-3xl font-bold">Entries</h1>
         <Link href="/entries/new" className="btn">

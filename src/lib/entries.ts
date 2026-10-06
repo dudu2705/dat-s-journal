@@ -9,12 +9,17 @@ export type Entry = {
 
 export type EntryInput = Pick<Entry, "title" | "body" | "tags">;
 
+export type ImportedEntry = EntryInput & { createdAt: string };
+
+export type ImportResult = { added: number; skipped: number };
+
 export interface JournalStore {
   listEntries(): Promise<Entry[]>;
   getEntry(id: string): Promise<Entry | null>;
   createEntry(input: EntryInput): Promise<Entry>;
   updateEntry(id: string, input: EntryInput): Promise<Entry>;
   removeEntry(id: string): Promise<void>;
+  importEntries(items: ImportedEntry[]): Promise<ImportResult>;
   listTags(): Promise<string[]>;
   addTag(name: string): Promise<string[]>;
   removeTag(name: string): Promise<string[]>;
@@ -45,8 +50,8 @@ export function normalizeTag(name: string): string {
   return name.trim().toLowerCase().replace(/^#/, "");
 }
 
-export function defaultTitle(): string {
-  return new Date().toLocaleDateString(undefined, {
+export function defaultTitle(date = new Date()): string {
+  return date.toLocaleDateString(undefined, {
     weekday: "short",
     day: "numeric",
     month: "short",
@@ -84,6 +89,24 @@ export const localStore: JournalStore = {
 
   async removeEntry(id) {
     writeEntries(readEntries().filter((e) => e.id !== id));
+  },
+
+  async importEntries(items) {
+    const entries = readEntries();
+    const seen = new Set<string>();
+    for (const entry of entries) {
+      seen.add(`${entry.createdAt}|${entry.title}|${entry.body}`);
+    }
+    let added = 0;
+    for (const item of items) {
+      const key = `${item.createdAt}|${item.title}|${item.body}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      entries.push({ id: crypto.randomUUID(), ...item, updatedAt: item.createdAt });
+      added++;
+    }
+    writeEntries(entries);
+    return { added, skipped: items.length - added };
   },
 
   async listTags() {
