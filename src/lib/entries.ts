@@ -1,62 +1,115 @@
 export type Entry = {
   id: string;
+  title: string;
   body: string;
   tags: string[];
   createdAt: string;
   updatedAt: string;
 };
 
-export type EntryInput = Pick<Entry, "body" | "tags">;
+export type EntryInput = Pick<Entry, "title" | "body" | "tags">;
 
-export interface EntryStore {
-  list(): Promise<Entry[]>;
-  create(input: EntryInput): Promise<Entry>;
-  update(id: string, input: EntryInput): Promise<Entry>;
-  remove(id: string): Promise<void>;
+export interface JournalStore {
+  listEntries(): Promise<Entry[]>;
+  getEntry(id: string): Promise<Entry | null>;
+  createEntry(input: EntryInput): Promise<Entry>;
+  updateEntry(id: string, input: EntryInput): Promise<Entry>;
+  removeEntry(id: string): Promise<void>;
+  listTags(): Promise<string[]>;
+  addTag(name: string): Promise<string[]>;
+  removeTag(name: string): Promise<string[]>;
 }
 
-const KEY = "dat-s-journal:entries";
+const ENTRIES_KEY = "dat-s-journal:entries";
+const TAGS_KEY = "dat-s-journal:tags";
 
-function read(): Entry[] {
-  const raw = localStorage.getItem(KEY);
+function readEntries(): Entry[] {
+  const raw = localStorage.getItem(ENTRIES_KEY);
   return raw ? (JSON.parse(raw) as Entry[]) : [];
 }
 
-function write(entries: Entry[]) {
-  localStorage.setItem(KEY, JSON.stringify(entries));
+function writeEntries(entries: Entry[]) {
+  localStorage.setItem(ENTRIES_KEY, JSON.stringify(entries));
 }
 
-export const localStore: EntryStore = {
-  async list() {
-    return read().sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+function readTags(): string[] {
+  const raw = localStorage.getItem(TAGS_KEY);
+  return raw ? (JSON.parse(raw) as string[]) : [];
+}
+
+function writeTags(tags: string[]) {
+  localStorage.setItem(TAGS_KEY, JSON.stringify(tags));
+}
+
+export function normalizeTag(name: string): string {
+  return name.trim().toLowerCase().replace(/^#/, "");
+}
+
+export function defaultTitle(): string {
+  return new Date().toLocaleDateString(undefined, {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+export const localStore: JournalStore = {
+  async listEntries() {
+    return readEntries().sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   },
 
-  async create(input) {
+  async getEntry(id) {
+    for (const entry of readEntries()) {
+      if (entry.id === id) return entry;
+    }
+    return null;
+  },
+
+  async createEntry(input) {
     const now = new Date().toISOString();
     const entry: Entry = { id: crypto.randomUUID(), ...input, createdAt: now, updatedAt: now };
-    write([entry, ...read()]);
+    writeEntries([entry, ...readEntries()]);
     return entry;
   },
 
-  async update(id, input) {
-    const entries = read();
+  async updateEntry(id, input) {
+    const entries = readEntries();
     const index = entries.findIndex((e) => e.id === id);
     if (index === -1) throw new Error("Entry not found");
     entries[index] = { ...entries[index], ...input, updatedAt: new Date().toISOString() };
-    write(entries);
+    writeEntries(entries);
     return entries[index];
   },
 
-  async remove(id) {
-    write(read().filter((e) => e.id !== id));
+  async removeEntry(id) {
+    writeEntries(readEntries().filter((e) => e.id !== id));
+  },
+
+  async listTags() {
+    return readTags().sort();
+  },
+
+  async addTag(name) {
+    const tag = normalizeTag(name);
+    const tags = readTags();
+    if (tag && !tags.includes(tag)) {
+      tags.push(tag);
+      writeTags(tags);
+    }
+    return tags.sort();
+  },
+
+  async removeTag(name) {
+    const tags = readTags().filter((t) => t !== name);
+    writeTags(tags);
+    const entries = readEntries();
+    for (const entry of entries) {
+      entry.tags = entry.tags.filter((t) => t !== name);
+    }
+    writeEntries(entries);
+    return tags.sort();
   },
 };
 
-export function parseTags(text: string): string[] {
-  const tags: string[] = [];
-  for (const part of text.split(",")) {
-    const tag = part.trim().toLowerCase().replace(/^#/, "");
-    if (tag && !tags.includes(tag)) tags.push(tag);
-  }
-  return tags;
-}
+export const store: JournalStore = localStore;
